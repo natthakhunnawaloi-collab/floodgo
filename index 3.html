@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flood Go Smart Relief</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f3f7fb;--card:#fff;--tx:#12263a;--mu:#5b6b7c;--pr:#0b6bcb;--pr2:#e3f0ff;--bd:#d9e3ee;--hi:#d92d20;--md:#f79009;--lo:#12b76a}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1621;--card:#17222f;--tx:#e8eef5;--mu:#97a6b6;--pr:#59a5ff;--pr2:#16304d;--bd:#2a3a4b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 'Sarabun',system-ui,sans-serif}
+.w{max-width:720px;margin:0 auto;padding:16px}h1{font-size:22px;margin:4px 0}h2{font-size:18px;margin:0 0 8px}
+.sub,.mu{color:var(--mu);font-size:14px}nav{display:flex;gap:6px;overflow-x:auto;margin:12px 0}
+nav button{flex:1;white-space:nowrap;padding:9px 12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;font:inherit;font-size:14px}
+nav button.on{background:var(--pr);color:#fff;border-color:var(--pr)}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:14px;font-weight:600;margin:10px 0 4px}
+input,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips label{display:inline-flex;gap:6px;align-items:center;margin:0;padding:7px 11px;border:1px solid var(--bd);border-radius:999px;font-weight:400}.chips input{width:auto}
+.btn{background:var(--pr);color:#fff;border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:600;width:100%;margin-top:14px}
+.btn.s{width:auto;margin:0;padding:6px 12px;font-size:13px}.btn.g{background:var(--mu)}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+.tag{padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}.hi{background:var(--hi)}.md{background:var(--md)}.lo{background:var(--lo)}
+.it{padding:10px 0;border-top:1px solid var(--bd)}.it:first-child{border-top:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.zone{border-radius:12px;padding:10px;color:#fff;font-size:13px}.zone b{font-size:20px;display:block}
+.step{display:flex;gap:4px;margin:10px 0}.step i{flex:1;height:8px;border-radius:4px;background:var(--bd)}.step i.d{background:var(--lo)}.step i.n{background:var(--pr)}
+.warn{color:var(--hi);font-weight:600}.ok{color:var(--lo);font-weight:600}.box{background:var(--pr2);border-radius:10px;padding:10px;font-size:14px;margin-top:10px}
+.stk{display:grid;grid-template-columns:1.4fr .7fr .7fr 1fr;gap:6px;margin-bottom:6px}
+#pm,#vm{height:280px;border-radius:12px;z-index:0}a{color:var(--pr)}
+</style></head><body><div class="w">
+<h1>🌊 Flood Go Smart Relief</h1><p class="sub">เชื่อมความต้องการ สินค้า การขนส่ง และเงินสนับสนุน</p>
+<nav id="nav"></nav><main id="app"></main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ===== ตั้งค่า =====
+var API='https://script.google.com/macros/s/AKfycbwGZhY-2eDIrl4KTMrxQT_4uRWA_zerIhBZZbHrCzhm0mdiUYcSdB1gnjJJe05n07yqPw/exec';
+var CENTER=[7.0,100.47]; // จุดกลางแผนที่เริ่มต้น [lat,lng] แก้เป็นพื้นที่ของคุณ
+// ==================
+var ITEMS=['น้ำดื่ม','อาหาร','ยา','ผ้าอ้อม','ของผู้สูงอายุ'];
+var ST=['กำลังจัดเตรียม','พร้อมจัดส่ง','ระหว่างขนส่ง','ส่งมอบสำเร็จ','ต้องติดตามเพิ่มเติม'];
+var UR={high:['เร่งด่วนมาก','hi','var(--hi)',3],mid:['ปานกลาง','md','var(--md)',2],low:['ไม่เร่งด่วน','lo','var(--lo)',1]};
+var tab='need',pin='',D={list:[],stock:[],err:''},q='',tr=null;
+try{pin=sessionStorage.getItem('pin')||''}catch(e){}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function get(p){return fetch(API+'?'+p).then(function(r){return r.json()})}
+function post(b){b.pin=pin;return fetch(API,{method:'POST',body:JSON.stringify(b)}).then(function(r){return r.json()})}
+function tag(u){return '<span class="tag '+UR[u][1]+'">'+UR[u][0]+'</span>'}
+function stepper(st){var h='<div class="step">';for(var i=0;i<4;i++)h+='<i class="'+(st==4?(i<3?'d':''):(i<st?'d':i==st?'n':''))+'"></i>';return h+'</div>'}
+var TABS=[['need','📍 แจ้งความต้องการ'],['map','🗺️ พื้นที่'],['track','🔎 ติดตาม'],['crew','🧑‍🤝‍🧑 อาสา/ร้านค้า']];
+function render(){document.getElementById('nav').innerHTML=TABS.map(function(t){return '<button class="'+(tab==t[0]?'on':'')+'" onclick="go(\''+t[0]+'\')">'+t[1]+'</button>'}).join('');
+ document.getElementById('app').innerHTML=({need:vNeed,map:vMap,track:vTrack,crew:vCrew})[tab]();if(tab=='need')initPick();if(tab=='map')initView()}
+function go(t){tab=t;render();if(t=='map'||t=='crew')refresh()}
+function refresh(){D.err='';var p='action=list&pin='+encodeURIComponent(pin);
+ get(p).then(function(l){D.list=Array.isArray(l)?l:[];if(pin)return get('action=stock&pin='+encodeURIComponent(pin)).then(function(s){D.stock=Array.isArray(s)?s:[]})})
+ .catch(function(){D.err='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (ตรวจค่า API)'}).then(render)}
+function vNeed(){return '<div class="c"><h2>แจ้งความต้องการ</h2>'+
+'<label>ชื่อผู้แจ้ง</label><input id="f_name"><label>เบอร์โทร (ไม่แสดงสาธารณะ)</label><input id="f_phone" type="tel">'+
+'<label>ตำแหน่งที่ต้องการความช่วยเหลือ</label><div id="pm"></div><div class="row" style="margin-top:6px"><button class="btn g s" type="button" onclick="useGps()">📍 ใช้ตำแหน่งปัจจุบัน</button><span class="mu" id="pt">แตะบนแผนที่เพื่อปักหมุด</span></div>'+
+'<label>จำนวนครัวเรือน</label><input id="f_hh" type="number" min="1" value="1">'+
+'<label>ต้องการอะไร</label><div class="chips">'+ITEMS.map(function(i){return '<label><input type="checkbox" name="f_it" value="'+i+'">'+i+'</label>'}).join('')+'</div>'+
+'<label>ความเร่งด่วน</label><select id="f_ur"><option value="high">เร่งด่วนมาก</option><option value="mid">ปานกลาง</option><option value="low">ไม่เร่งด่วน</option></select>'+
+'<label>ประเภทผู้ใช้</label><select id="f_type"><option value="free">ขาดแคลน – ขอรับฟรี/คูปอง</option><option value="buy">มีกำลังซื้อ – สั่งซื้อ</option></select>'+
+'<button class="btn" id="sb" onclick="submitReq()">ส่งคำขอ</button><div id="res"></div></div>'}
+function submitReq(){var its=[].slice.call(document.querySelectorAll('[name=f_it]:checked')).map(function(x){return x.value}),v=function(i){return document.getElementById(i).value},r=document.getElementById('res');
+ if(!v('f_name').trim()||!its.length||!pick){r.innerHTML='<p class="warn">กรอกชื่อ ปักหมุดตำแหน่ง และเลือกสิ่งที่ต้องการอย่างน้อย 1 อย่าง</p>';return}
+ document.getElementById('sb').disabled=true;r.innerHTML='<p class="mu">กำลังส่ง...</p>';
+ post({action:'submit',name:v('f_name').trim().slice(0,50)+' | '+pick.lat.toFixed(5)+','+pick.lng.toFixed(5),phone:v('f_phone'),area:'📍'+pick.lat.toFixed(2)+','+pick.lng.toFixed(2),hh:+v('f_hh'),items:its,ur:v('f_ur'),type:v('f_type')}).then(function(d){
+  r.innerHTML=d.id?'<div class="box">✅ ส่งแล้ว หมายเลขรายการ <b>'+d.id+'</b><br>เก็บไว้เช็กสถานะในแท็บ “ติดตาม”</div>':'<p class="warn">ส่งไม่สำเร็จ ลองใหม่</p>';document.getElementById('sb').disabled=false})
+ .catch(function(){r.innerHTML='<p class="warn">เชื่อมต่อไม่ได้ ลองใหม่</p>';document.getElementById('sb').disabled=false})}
+var pick=null,pm=null,pk=null;
+function parseArea(a){var m=/(-?\d+\.\d+),(-?\d+\.\d+)/.exec(a);return m?{lat:+m[1],lng:+m[2]}:null}
+function tiles(m){L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(m)}
+function initPick(){var d=document.getElementById('pm');if(typeof L==='undefined'){d.innerHTML='<p class="mu" style="padding:10px">โหลดแผนที่ไม่ได้ ตรวจอินเทอร์เน็ต</p>';return}
+ pm=L.map('pm').setView(pick?[pick.lat,pick.lng]:CENTER,pick?15:10);tiles(pm);pk=null;if(pick)setPick(pick.lat,pick.lng);
+ pm.on('click',function(e){setPick(e.latlng.lat,e.latlng.lng)})}
+function setPick(lat,lng,fly){pick={lat:lat,lng:lng};if(!pm)return;
+ if(pk)pk.setLatLng([lat,lng]);else pk=L.circleMarker([lat,lng],{radius:9,color:'#d92d20',fillColor:'#d92d20',fillOpacity:.8}).addTo(pm);
+ if(fly)pm.setView([lat,lng],16);var t=document.getElementById('pt');if(t)t.textContent='ปักหมุดแล้ว ✓'}
+function useGps(){if(!navigator.geolocation){alert('เบราว์เซอร์นี้ไม่รองรับ ให้แตะบนแผนที่แทน');return}
+ navigator.geolocation.getCurrentPosition(function(p){setPick(p.coords.latitude,p.coords.longitude,true)},function(){alert('ขอตำแหน่งไม่ได้ กรุณาอนุญาตการเข้าถึงตำแหน่ง หรือแตะบนแผนที่แทน')},{enableHighAccuracy:true,timeout:15000})}
+function vMap(){
+ return '<div class="c"><h2>แผนที่ความต้องการ</h2><p class="sub">วงกลม = จำนวนครัวเรือน · สี = ความเร่งด่วนสูงสุด · ตำแหน่งแสดงแบบหยาบ (~1 กม.) เพื่อความเป็นส่วนตัว</p>'+(D.err?'<p class="warn">'+D.err+'</p>':'')+'<div id="vm"></div></div>'+
+ '<div class="c"><h2>คำขอทั้งหมด</h2>'+(D.list.length?D.list.map(function(r){var p=parseArea(r.area);return '<div class="it"><div class="row"><b>'+esc(r.area)+'</b>'+tag(r.ur)+'</div><div class="mu">'+r.hh+' ครัวเรือน · '+esc(r.items)+' · '+ST[r.st]+(p?' · <a href="https://www.google.com/maps?q='+p.lat+','+p.lng+'" target="_blank" rel="noopener">เปิดใน Google Maps</a>':'')+'</div></div>'}).join(''):'<p class="mu">ยังไม่มีข้อมูล</p>')+'</div>'}
+function initView(){var d=document.getElementById('vm');if(!d||typeof L==='undefined')return;
+ var m=L.map('vm').setView(CENTER,10);tiles(m);var by={},pts=[],col={3:'#d92d20',2:'#f79009',1:'#12b76a'};
+ D.list.forEach(function(r){var p=parseArea(r.area);if(!p||!UR[r.ur])return;var z=by[r.area]=by[r.area]||{p:p,n:0,u:1};z.n+=+r.hh;z.u=Math.max(z.u,UR[r.ur][3])});
+ Object.keys(by).forEach(function(k){var z=by[k],c=col[z.u];L.circleMarker([z.p.lat,z.p.lng],{radius:10+Math.min(z.n,60)/3,color:c,fillColor:c,fillOpacity:.6}).addTo(m).bindPopup(z.n+' ครัวเรือน');pts.push([z.p.lat,z.p.lng])});
+ if(pts.length)m.fitBounds(pts,{padding:[30,30],maxZoom:13})}
+function vTrack(){var h='<div class="c"><h2>ติดตามสถานะ</h2><div class="row"><input id="q" value="'+esc(q)+'" placeholder="FG-1001"><button class="btn s" style="flex:0 0 auto" onclick="doTrack()">ค้นหา</button></div>';
+ if(tr&&tr.error)h+='<p class="warn">ไม่พบหมายเลขนี้</p>';
+ if(tr&&!tr.error)h+='<div class="it"><div class="row"><b>'+tr.id+'</b>'+tag(tr.ur)+'</div><div class="mu">'+esc(tr.area)+' · '+tr.hh+' ครัวเรือน · '+esc(tr.items)+'</div>'+stepper(tr.st)+'<b>สถานะ: '+ST[tr.st]+'</b></div>';
+ return h+'</div>'}
+function doTrack(){q=document.getElementById('q').value.trim();get('action=track&id='+encodeURIComponent(q)).then(function(d){tr=d;render()}).catch(function(){tr={error:1};render()})}
+function vCrew(){if(!pin)return '<div class="c"><h2>สำหรับอาสา/ร้านค้า</h2><label>รหัส PIN</label><input id="pn" type="password"><button class="btn" onclick="pin=document.getElementById(\'pn\').value;try{sessionStorage.setItem(\'pin\',pin)}catch(e){}refresh()">เข้าสู่ระบบ</button></div>';
+ var h='<div class="c"><h2>งานจัดส่ง</h2><p class="mu">พิกัดจริงของแต่ละราย: เปิดชีต Requests ดูคอลัมน์ name หลังเครื่องหมาย | แล้วคัดลอกไปวางใน Google Maps</p>'+(D.err?'<p class="warn">'+D.err+'</p>':'')+(D.list.length?D.list.map(function(r){return '<div class="it"><div class="row"><b>'+r.id+' · '+esc(r.area)+'</b>'+tag(r.ur)+'</div><div class="mu">'+r.hh+' ครัวเรือน · '+esc(r.items)+'</div>'+stepper(r.st)+
+  '<select onchange="setSt(\''+r.id+'\',this.value)">'+ST.map(function(s,i){return '<option value="'+i+'"'+(i==r.st?' selected':'')+'>'+s+'</option>'}).join('')+'</select></div>'}).join(''):'<p class="mu">ไม่มีงาน</p>')+'</div>';
+ h+='<div class="c"><h2>สต็อกร้านค้า</h2><div class="stk mu"><span>สินค้า</span><span>ต้องการ</span><span>มี</span><span>หมดอายุ</span></div>'+D.stock.map(function(s,i){var gap=s.need-s.have;
+  return '<div class="stk"><input value="'+esc(s.n)+'" data-k="n" data-i="'+i+'"><input type="number" value="'+s.need+'" data-k="need" data-i="'+i+'"><input type="number" value="'+s.have+'" data-k="have" data-i="'+i+'"><input type="date" value="'+esc(s.exp)+'" data-k="exp" data-i="'+i+'"></div>'+
+  (gap>0?'<div class="warn" style="font-size:13px">ขาดอีก '+gap+'</div>':'')}).join('')+
+ '<div class="row"><button class="btn g s" onclick="D.stock.push({n:\'สินค้าใหม่\',need:0,have:0,exp:\'\'});saveStock(1)">+ เพิ่มแถว</button><button class="btn s" onclick="saveStock()">บันทึกสต็อก</button></div></div>'+
+ '<button class="btn g" onclick="pin=\'\';try{sessionStorage.removeItem(\'pin\')}catch(e){}render()">ออกจากระบบ</button>';return h}
+function setSt(id,v){post({action:'setStatus',id:id,status:+v}).then(function(d){if(d.error)alert('ไม่สำเร็จ: '+d.error);refresh()})}
+function saveStock(local){[].slice.call(document.querySelectorAll('[data-k]')).forEach(function(el){var s=D.stock[el.dataset.i];if(s)s[el.dataset.k]=el.dataset.k=='need'||el.dataset.k=='have'?(+el.value||0):el.value});
+ if(local){render();return}post({action:'setStock',rows:D.stock}).then(function(d){alert(d.ok?'บันทึกแล้ว':'ไม่สำเร็จ: '+d.error);refresh()})}
+render();
+</script></body></html>
